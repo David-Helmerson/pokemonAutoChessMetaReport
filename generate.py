@@ -3,6 +3,8 @@
 import os
 import math
 import random
+import argparse
+import json
 import pandas as pd
 import itertools as itools
 import matplotlib.pyplot as plt
@@ -74,14 +76,22 @@ for pkm in LIST_POKEMON:
 LIST_TYPE = [k.lower() for k in TYPE_POKEMON.keys()]
 
 
-def load_data_mongodb(time_limit):
-    uri = os.environ.get("MONGO_URI")
-    client = MongoClient(uri)
-    db = client.test
-    collection = db['detailledstatisticv2']
-    cursor = collection.find({"time": {"$gt": time_limit}})
-    result = list(cursor)
-    client.close()
+def load_data(time_limit, local):
+    if local:
+        file = open('data/input/test.detailledstatisticv2.json')
+        data = json.load(file)
+        result = [e for e in data if e['time'] > time_limit]
+        file.close()
+
+    else:
+        uri = os.environ.get("MONGO_URI")
+        client = MongoClient(uri)
+        db = client.test
+        collection = db['detailledstatisticv2']
+        cursor = collection.find({"time": {"$gt": time_limit}})
+        result = list(cursor)
+        client.close()
+
     return result
 
 
@@ -318,14 +328,20 @@ def get_meta_report(df):
     return list_meta_report
 
 
-def export_data_mongodb(list_data, db_name, collection_name):
-    uri = os.getenv("MONGO_URI")
-    client = MongoClient(uri)
-    db = client[db_name]
-    collection = db[collection_name]
-    collection.delete_many({})
-    collection.insert_many(list_data)
-    client.close()
+def export_data(list_data, db_name, collection_name, local):
+    if local:
+        outfile = open(f'data/output/{db_name}.{collection_name}.json', 'w+')
+        json.dump(list(list_data), outfile)
+        outfile.close()
+
+    else:
+        uri = os.getenv("MONGO_URI")
+        client = MongoClient(uri)
+        db = client[db_name]
+        collection = db[collection_name]
+        collection.delete_many({})
+        collection.insert_many(list_data)
+        client.close()
 
 
 def plot_cluster_parameters(df, list_sample, list_epsilon):
@@ -381,23 +397,23 @@ def plot_tsne_parameters(df, list_perplexity):
     plt.show()
 
 
-def main():
-    print(f"{datetime.now().time()} load data from MongoDB")
+def main(local, timeframe):
+    print(f"{datetime.now().time()} load data from {'file' if local else 'MongoDB'}")
     time_now = math.floor(datetime.now().timestamp() * 1000)
-    time_limit = time_now - 15 * (24 * 60 * 60 * 1000)
-    json_data = load_data_mongodb(time_limit)
+    time_limit = time_now - timeframe * (24 * 60 * 60 * 1000)
+    json_data = load_data(time_limit, local)
 
     print(f"{datetime.now().time()} creating item data...")
     items = create_item_data(json_data)
-    export_data_mongodb(items, "test", "items-statistic")
+    export_data(items, "test", "items-statistic", local)
 
     print(f"{datetime.now().time()} creating pokemon data...")
     pokemons = create_pokemon_data(json_data)
-    export_data_mongodb(pokemons, "test", "pokemons-statistic")
+    export_data(pokemons, "test", "pokemons-statistic", local)
 
     print(f"{datetime.now().time()} creating pokemon data with threshold...")
     pokemons = create_pokemon_data_elo_threshold(json_data)
-    export_data_mongodb(pokemons, "test", "pokemons-statistic-v2")
+    export_data(pokemons, "test", "pokemons-statistic-v2", local)
 
     print(f"{datetime.now().time()} creating dataframe...")
     df_match = create_dataframe(json_data)
@@ -416,8 +432,12 @@ def main():
     report = get_meta_report(df_concat)
 
     print(f"{datetime.now().time()} write output file...")
-    export_data_mongodb(report, "test", "meta")
+    export_data(report, "test", "meta", local)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--local', action='store_true')
+    parser.add_argument('-t', '--timeframe', action='store', default=15, type=int)
+    args = parser.parse_args()
+    main(**vars(args))

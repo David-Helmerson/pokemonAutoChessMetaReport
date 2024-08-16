@@ -401,6 +401,18 @@ def plot_tsne_parameters(df, list_perplexity):
     plt.show()
 
 
+def apply_weighting(x, triggers):
+    weights = [t for t in triggers if t <= x]
+    return math.sqrt(max(weights)*x) if weights else 0
+
+
+def weight_syn_threshold(df: pd.DataFrame):
+    df_weighted = df.copy()
+    for synergy in LIST_TYPE:
+        df_weighted.loc[:, synergy] = df_weighted[synergy].map(lambda x: apply_weighting(x, TYPE_TRIGGER[synergy.upper()]))
+    return df_weighted
+
+
 def main(local, timeframe):
     print(f"{datetime.now().time()} load data from {'file' if local else 'MongoDB'}")
     if local:
@@ -425,8 +437,10 @@ def main(local, timeframe):
 
     print(f"{datetime.now().time()} applying t-SNE...")
     df_filtered = df_match[LIST_TYPE]
-    df_tsne = apply_tsne(df_filtered, 50)
-    #plot_tsne_parameters(df_filtered, [20,50])
+    #TODO: scale synergy embedding dists by threshold
+    df_weighted = weight_syn_threshold(df_filtered)
+    df_tsne = apply_tsne(df_weighted, 100)
+    #plot_tsne_parameters(df_filtered, [20,50,100])
 
     print(f"{datetime.now().time()} applying DBSCAN...")
     df_cluster = apply_clustering(df_tsne, 2, 30)

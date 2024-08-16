@@ -76,10 +76,13 @@ for pkm in LIST_POKEMON:
 LIST_TYPE = [k.lower() for k in TYPE_POKEMON.keys()]
 
 
-def load_data(time_limit, local):
+def load_data(timeframe, local):
+    timeframe_ms = timeframe * 24 * 60 * 60 * 1000
+
     if local:
         file = open('data/input/test.detailledstatisticv2.json')
         data = json.load(file)
+        time_limit = max(data, key = lambda e: e['time'])['time'] - timeframe_ms
         result = [e for e in data if e['time'] > time_limit]
         file.close()
 
@@ -88,6 +91,7 @@ def load_data(time_limit, local):
         client = MongoClient(uri)
         db = client.test
         collection = db['detailledstatisticv2']
+        time_limit = math.floor(datetime.now().timestamp() * 1000) - timeframe_ms
         cursor = collection.find({"time": {"$gt": time_limit}})
         result = list(cursor)
         client.close()
@@ -399,9 +403,10 @@ def plot_tsne_parameters(df, list_perplexity):
 
 def main(local, timeframe):
     print(f"{datetime.now().time()} load data from {'file' if local else 'MongoDB'}")
+    if local:
+        time_now = ()
     time_now = math.floor(datetime.now().timestamp() * 1000)
-    time_limit = time_now - timeframe * (24 * 60 * 60 * 1000)
-    json_data = load_data(time_limit, local)
+    json_data = load_data(timeframe, local)
 
     print(f"{datetime.now().time()} creating item data...")
     items = create_item_data(json_data)
@@ -425,7 +430,7 @@ def main(local, timeframe):
 
     print(f"{datetime.now().time()} applying DBSCAN...")
     df_cluster = apply_clustering(df_tsne, 2, 30)
-    #plot_cluster_parameters(df_tsne, [10,20,30,40,50,100], [1,2,3,4,5,6,7])
+    plot_cluster_parameters(df_tsne, [10,20,30,40,50,100], [1,2,3,4,5,6,7])
 
     print(f"{datetime.now().time()} create meta report...")
     df_concat = pd.concat([df_match, df_cluster], axis=1)
@@ -438,6 +443,6 @@ def main(local, timeframe):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--local', action='store_true')
-    parser.add_argument('-t', '--timeframe', action='store', default=15, type=int)
+    parser.add_argument('-t', '--timeframe', action='store', default=15, type=float)
     args = parser.parse_args()
     main(**vars(args))
